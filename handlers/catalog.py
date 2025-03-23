@@ -37,25 +37,39 @@ async def send_products(message: types.Message, offset):
 
         # Кнопки для количества и добавления
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        product_id = str(product.get('ID', '0')).strip('=')
         quantity_button = [
-            InlineKeyboardButton(text="-1", callback_data=f"dec_={product['ID']}_0"),
-            InlineKeyboardButton(text="1", callback_data=f"qty_={product['ID']}_1"),
-            InlineKeyboardButton(text="+1", callback_data=f"inc_={product['ID']}_0"),
+            InlineKeyboardButton(text="-1", callback_data=f"dec_{product_id}_0"),
+            InlineKeyboardButton(text="1", callback_data=f"qty_{product_id}_1"),
+            InlineKeyboardButton(text="+1", callback_data=f"inc_{product_id}_0"),
         ]
         add_button = InlineKeyboardButton(
-            text="Добавить", callback_data=f"add_{product['ID']}_1"
+            text="Добавить", callback_data=f"add_{product_id}_1"
         )
         keyboard.inline_keyboard.append(quantity_button)
         keyboard.inline_keyboard.append([add_button])
 
-        await message.reply(card_text, reply_markup=keyboard, parse_mode="html")
+        image_url = product['Image_URL']
+        if image_url:
+            try:
+                await message.bot.send_photo(chat_id=message.chat.id,
+                                             photo=image_url,
+                                             caption=card_text,
+                                             reply_markup=keyboard,
+                                             parse_mode="HTML"
+                                             )
+            except Exception as e:
+                await message.reply(f"Ошибка загрузки изображения: {e}\n\n{card_text}", reply_markup=keyboard,
+                                    parse_mode="HTML")
+        else:
+
+            await message.reply(card_text, reply_markup=keyboard, parse_mode="html")
 
     if offset + LIMIT < total_products:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         next_button = InlineKeyboardButton(text="Далее", callback_data=f"mroe_{offset + LIMIT}")
         keyboard.inline_keyboard.append([next_button])
         await message.reply("Продолжить?", reply_markup=keyboard)
-
 
     # Добавляем корзину внизу
     cart = get_cart()
@@ -86,28 +100,42 @@ async def process_callback(callback_query: types.CallbackQuery):
 
     elif data.startswith("inc_") or data.startswith("dec_"):
         action, product_id, current_qty = data.split("_")
-        product_id = int(product_id)
-        current_qty = int(current_qty)
+        try:
+            product_id = int(product_id.strip('='))  # Очищаем от символа '='
+            current_qty = int(current_qty)
+        except ValueError as e:
+            await callback_query.bot.answer_callback_query(callback_query.id,
+                                                           text=f"Ошибка: неверный формат данных ({e})")
+            return
         change = 1 if action == "inc" else -1
         new_quantity = max(1, current_qty + change)
 
-        # Обновляем текст кнопки количества
-        for row in callback_query.message.reply_markup.inline_keyboard:
-            for button in row:
-                if button.callback_data.startswith(f"qty_{product_id}_"):
-                    button.text = str(new_quantity)
-                    button.callback_data = f"qty_{product_id}_{new_quantity}"
-                elif button.callback_data.startswith(f"add_{product_id}_"):
-                    button.callback_data = f"add_{product_id}_{new_quantity}"
-                elif button.callback_data.startswith(f"inc_{product_id}_"):
-                    button.callback_data = f"inc_{product_id}_{new_quantity}"
-                elif button.callback_data.startswith(f"dec_{product_id}_"):
-                    button.callback_data = f"dec_{product_id}_{new_quantity}"
+        # Проверяем, изменилось ли количество
+        if new_quantity == current_qty:
+            await callback_query.bot.answer_callback_query(
+                callback_query.id,
+                text="Количество не может быть меньше 1!" if action == "dec" else "Количество не изменилось!"
+            )
+        else:
+
+            # Обновляем текст кнопки количества
+            for row in callback_query.message.reply_markup.inline_keyboard:
+                for button in row:
+                    if button.callback_data.startswith(f"qty_{product_id}_"):
+                        button.text = str(new_quantity)
+                        button.callback_data = f"qty_{product_id}_{new_quantity}"
+                    elif button.callback_data.startswith(f"add_{product_id}_"):
+                        button.callback_data = f"add_{product_id}_{new_quantity}"
+                    elif button.callback_data.startswith(f"inc_{product_id}_"):
+                        button.callback_data = f"inc_{product_id}_{new_quantity}"
+                    elif button.callback_data.startswith(f"dec_{product_id}_"):
+                        button.callback_data = f"dec_{product_id}_{new_quantity}"
 
         await callback_query.message.edit_reply_markup(reply_markup=callback_query.message.reply_markup)
         await callback_query.bot.answer_callback_query(callback_query.id)
 
     await callback_query.bot.answer_callback_query(callback_query.id)
+
 
 async def update_cart_message(message: types.Message, user_id):
     """Обновляем сообщение с корзиной (ищем последнее сообщение с корзиной и редактируем его)."""
@@ -127,4 +155,3 @@ async def update_cart_message(message: types.Message, user_id):
                 break
         else:
             await message.reply(cart_text, parse_mode="HTML")
-

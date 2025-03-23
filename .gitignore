@@ -6,6 +6,7 @@ venv/
 .idea/
 
 # Секреты
+
 .env
 tgmag.json
 package.json

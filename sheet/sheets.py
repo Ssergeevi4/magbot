@@ -15,6 +15,19 @@ spreadsheet = client.open(SHEET_NAME)
 products_sheet = spreadsheet.worksheet("Products")
 cart_sheet = spreadsheet.worksheet("Cart")
 
+
+def is_admin(user_id):
+    try:
+        sheet = spreadsheet.worksheet("Admins")
+        admins = sheet.get_all_records()
+        for admin in admins:
+            if str(admin['User_ID']) == str(user_id) and admin['Role'] in ['admin']:
+                return True
+        return False
+    except Exception as e:
+        print(f"Ошибка при проверке администратора: {e}")
+        return False
+
 def get_products():
     """Получить все товары."""
     return products_sheet.get_all_records()

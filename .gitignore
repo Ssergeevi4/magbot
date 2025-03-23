@@ -5,3 +5,5 @@ package.json
 # Виртуальное окружение
 .venv/
 venv/
+
+.idea
